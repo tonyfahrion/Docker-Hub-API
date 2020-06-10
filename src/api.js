@@ -19,8 +19,9 @@
 (function() {
     'use strict';
 
-    //let _ = require('lodash');
-    let request = require('request');
+    let bent = require('bent');
+
+    let hubRegistry = 'https://hub.docker.com';
 
     let apiVersion = 2;
 
@@ -98,22 +99,23 @@
          *
          * @returns {Promise}
          */
-        loggedInUser: function() {
-            return new Promise(
-                function(resolve, reject) {
-                    if (!loggedInToken) {
-                        return reject(
-                            new Error(
-                                'No login token found! Please login() or setLoginToken() to continue!',
-                            ),
-                        );
-                    }
+        loggedInUser: () => {
+            if (!loggedInToken) {
+                return new Promise(
+                    function(resolve, reject) {
+                        return reject(new Error('No login token found! Please login() or setLoginToken() to continue!'))
+                    }.bind(this),
+                )
+            }
 
-                    this.makeGetRequest('user/')
-                        .then(resolve)
-                        .catch(reject);
-                }.bind(this),
-            );
+            this.makeGetRequest('user/')
+        },
+        /**
+         * Override docker hub registry url to support custom installations as well
+         * @param {String} url - defaults to https://hub.docker.com, but can be overridden here 
+         */
+        setRegistryURL: (url) => {
+            hubRegistry = url
         },
         /**
          * This will set the caching options.
@@ -907,12 +909,6 @@
          * @returns {Promise}
          */
         repository: function(username, name) {
-            // If no name is passed in, then the user wants an official repository
-            if (username && !name) {
-                name = username;
-                username = 'library';
-            }
-
             // If username is '_' then we're trying to get an official repository
             if (username === '_') {
                 username = 'library';
@@ -920,6 +916,8 @@
 
             // Make sure the username is all lowercase as per Docker Hub requirements
             username = username.toLowerCase();
+
+            console.log(`repositories/${username}/${name}`)
 
             return this.makeGetRequest(`repositories/${username}/${name}`);
         },
@@ -1141,7 +1139,7 @@
          * @param {{page: Number, perPage: Number}} [options] - the options for this call
          * @returns {Promise}
          */
-        tags: function(username, name, options) {
+        tags: function(username, name, options = {page: 1, perPage: 5}) {
             // If no name is passed in, then the user wants an official repository
             if (username && !name && !options) {
                 name = username;
@@ -1167,8 +1165,7 @@
 
             return this.makeGetRequest(
                 `repositories/${username}/${name}/tags?page_size=${options.perPage ||
-                    100}&page=${options.page || 1}`,
-                'results',
+                    100}&page=${options.page || 1}`
             );
         },
         /**
@@ -1249,20 +1246,9 @@
          * @returns {Promise}
          */
         user: function(username) {
-            return new Promise(
-                function(resolve, reject) {
-                    if (!username) {
-                        return reject(new Error('Username must be provided!'));
-                    }
-
-                    // Make sure the username is all lowercase as per Docker Hub requirements
-                    username = username.toLowerCase();
-
-                    this.makeGetRequest(`users/${username}`)
-                        .then(resolve)
-                        .catch(reject);
-                }.bind(this),
-            );
+            // Make sure the username is all lowercase as per Docker Hub requirements
+            username = username.toLowerCase();
+            this.makeGetRequest(`users/${username}`)
         },
         /**
          * Gets the webhooks for a repository you own.
@@ -1273,32 +1259,25 @@
          * @returns {Promise}
          */
         webhooks: function(username, name, options) {
-            return new Promise(
-                function(resolve, reject) {
-                    if (!username || typeof username !== 'string') {
-                        return reject(new Error('Username must be provided!'));
-                    }
+            if (!username || typeof username !== 'string') {
+                return reject(new Error('Username must be provided!'));
+            }
 
-                    if (!name || typeof name !== 'string') {
-                        return reject(new Error('Repository name must be provided!'));
-                    }
+            if (!name || typeof name !== 'string') {
+                return reject(new Error('Repository name must be provided!'));
+            }
 
-                    if (!options) {
-                        options = { page: 1, perPage: 100 };
-                    }
+            if (!options) {
+                options = { page: 1, perPage: 100 };
+            }
 
-                    // Make sure the username is all lowercase as per Docker Hub requirements
-                    username = username.toLowerCase();
+            // Make sure the username is all lowercase as per Docker Hub requirements
+            username = username.toLowerCase();
 
-                    this.makeGetRequest(
-                        `repositories/${username}/${name}/repositories/webhooks?page_size=${options.perPage ||
-                            100}&page=${options.page || 1}`,
-                        'results',
-                    )
-                        .then(resolve)
-                        .catch(reject);
-                }.bind(this),
-            );
+            this.makeGetRequest(
+                `repositories/${username}/${name}/repositories/webhooks?page_size=${options.perPage ||
+                    100}&page=${options.page || 1}`
+            )
         },
         /**
          * Checks the body response from a call to Docker Hub API to check if it's an error.
@@ -1332,50 +1311,12 @@
          * Makes a raw get request to the Docker Hub API.
          *
          * @param {String} path - the path to fetch
-         * @param {String} [extract] - the name of the property in the resulting JSON to extract. If left blank it will return the entire JSON
          * @returns {Promise}
          */
-        makeGetRequest(path, extract) {
-            return new Promise(
-                function(resolve, reject) {
-                    let params = this.makeRequestParams('get', path);
-
-                    if (cacheEnabled && cache.hasOwnProperty(params.url)) {
-                        if (Date.now() >= cache[params.url].expires) {
-                            delete cache[params.url];
-                        } else {
-                            return resolve(cache[params.url].data);
-                        }
-                    }
-
-                    request(
-                        params,
-                        function(err, res, body) {
-                            if (err) {
-                                return reject(err);
-                            }
-
-                            // Check for potential error messages
-                            if (this.bodyHasError(body)) {
-                                return reject(new Error(JSON.stringify(body)));
-                            }
-
-                            if (cacheEnabled) {
-                                cache[params.url] = {
-                                    expires: Date.now() + cacheTimeSeconds * 1000,
-                                    data: body,
-                                };
-                            }
-
-                            if (extract && body.hasOwnProperty(extract)) {
-                                return resolve(body[extract]);
-                            }
-
-                            return resolve(body);
-                        }.bind(this),
-                    );
-                }.bind(this),
-            );
+        makeGetRequest(path) {
+            let params = this.makeRequestParams(path)
+            const get = bent(`${hubRegistry}/v${apiVersion}/`, 'GET', 'json', params.headers)
+            return get(params.path)
         },
         /**
          * Makes a raw delete request to the Docker Hub API.
@@ -1485,52 +1426,18 @@
          * @returns {Promise}
          */
         makePutRequest(path, data, extract) {
-            return new Promise(
-                function(resolve, reject) {
-                    if (!data || typeof data !== 'object') {
-                        return reject(
-                            new Error(
-                                'Data must be passed to all PUT requests in the form of an object!',
-                            ),
-                        );
-                    }
+            let params = this.makeRequestParams(path)
+            const put = bent(`${hubRegistry}/v${apiVersion}/`, 'PUT', 'json', params.headers)
 
-                    request(
-                        this.makeRequestParams('put', path, data),
-                        function(err, res, body) {
-                            if (err) {
-                                return reject(err);
-                            }
-
-                            // Some api calls don't return any data
-                            if (!body) {
-                                return resolve();
-                            }
-
-                            // Check for potential error messages
-                            if (this.bodyHasError(body)) {
-                                return reject(new Error(JSON.stringify(body)));
-                            }
-
-                            if (extract && body.hasOwnProperty(extract)) {
-                                return resolve(body[extract]);
-                            }
-
-                            return resolve(body);
-                        }.bind(this),
-                    );
-                }.bind(this),
-            );
+            return put(path, data)
         },
         /**
          * Generates and error checks a request object.
          *
-         * @param {String} method - the method of the request
          * @param {String} path - the path to fetch
-         * @param {Object} [data] - the data to send
          * @returns {Object}
          */
-        makeRequestParams(method, path, data) {
+        makeRequestParams(path) {
             // Normalize the path so it doesn't start with a slash
             if (path.substr(0, 1) === '/') {
                 path = path.substr(1);
@@ -1541,21 +1448,12 @@
                 path = path + '/';
             }
 
-            let url = `https://hub.docker.com/v${apiVersion}/${path}`;
-
             let headers = {};
-
             if (loggedInToken) {
                 headers.Authorization = `JWT ${loggedInToken}`;
             }
 
-            let params = { url, method, json: true, headers };
-
-            if (data) {
-                params.body = data;
-            }
-
-            return params;
+            return { path, headers };
         },
     };
 })();
