@@ -1,4 +1,4 @@
-# Thin Docker Hub
+# Thin Docker Registry API
 <!-- [![Build Status](https://img.shields.io/travis/RyanTheAllmighty/Docker-Hub-API.svg?style=flat-square)](https://travis-ci.org/RyanTheAllmighty/Docker-Hub-API)
 [![NPM Downloads](https://img.shields.io/npm/dt/docker-hub-api.svg?style=flat-square)](https://www.npmjs.com/package/docker-hub-api)
 [![NPM Version](https://img.shields.io/npm/v/docker-hub-api.svg?style=flat-square)](https://www.npmjs.com/package/docker-hub-api)
@@ -7,7 +7,11 @@
 
 **NOTE**: This builds upon the wonderful work from https://github.com/RyanTheAllmighty/Docker-Hub-API. So main goal was to get rid of the `request` node package and make this library as thin as possible, while keeping the maintenance burden as low as possible. Might be broken at the moment.
 
-Thin Docker Hub is an API library written for NodeJS to access the official Docker Hub/Registry.
+During the transition phase, this node module will not get published to see how this module evolves and find an appropriate name for it. It is planned to come up with another module that allows to consume the docker hub API
+results easier, but opinionated.
+
+
+Thin Docker Hub is an API library written for NodeJS to access Docker registries.
 
 ## Install
 To install this package into your project simply run the following:
@@ -133,7 +137,7 @@ const hub = require('not-published-yet...')
 
 Below is a sample of the output:
 
-```json
+```js
 {
     user: 'library',
     name: 'alpine',

@@ -19,9 +19,9 @@
 (function() {
     'use strict';
 
-    let bent = require('bent');
-
-    let hubRegistry = 'https://hub.docker.com';
+    const bent = require('bent')
+    let hubRegistry = 'https://hub.docker.com'
+    let httpHeader  = { }
 
     let apiVersion = 2;
 
@@ -108,7 +108,7 @@
                 )
             }
 
-            this.makeGetRequest('user/')
+            return this.makeSimpleRequest('GET', 'user/')
         },
         /**
          * Override docker hub registry url to support custom installations as well
@@ -117,6 +117,18 @@
         setRegistryURL: (url) => {
             hubRegistry = url
         },
+
+        /**
+         * Set HTTP header to be send with requests. If you use our login or setAuthToken
+         * function, this library will override a potential "Authorization" header and
+         * replace it with its own.
+         * 
+         * @param {Object} headerObj
+         */
+        setHttpHeader: (headerObj) => {
+            httpHeader = headerObj
+        },
+
         /**
          * This will set the caching options.
          *
@@ -387,49 +399,34 @@
          * Gets the comments for a repository.
          *
          * @param {String} username - the username to get the comments for
-         * @param {String} name - the name of the repository to get the comments for
+         * @param {String} repository - the name of the repository to get the comments for
          * @param {{page: Number, perPage: Number}} [options] - the options for this call
          * @returns {Promise}
          */
-        comments: function(username, name, options) {
-            return new Promise(
-                function(resolve, reject) {
-                    // If no name is passed in, then the user wants an official repository
-                    if (username && !name && !options) {
-                        name = username;
-                        username = 'library';
-                        options = { page: 1, perPage: 100 };
-                    } else if (username && name && !options) {
-                        if (name instanceof Object) {
-                            options = name;
-                            name = username;
-                            username = 'library';
-                        } else {
-                            options = { page: 1, perPage: 100 };
-                        }
-                    }
+        comments: function(username, repository, options) {
+            // handle pageing options
+            if(!options) {
+                options = { page: 1, perPage: 5 }
+            }
+            if(!options.hasOwnProperty('page')) {
+                options.page = 1
+            }
+            if(!options.hasOwnProperty('perPage')) {
+                options.perPage = 5
+            }
 
-                    // If username is '_' then we're trying to get an official repository
-                    if (username === '_') {
-                        username = 'library';
-                    }
+            if(!username) {
+                return new Promise((_, reject) => reject('username parameter not set while calling comments()!'))
+            }
+            if(!repository) {
+                return new Promise((_, reject) => reject('repository parameter not set while calling comments()!'))
+            }
 
-                    if (!options) {
-                        options = { page: 1, perPage: 100 };
-                    }
+            // Make sure the username is all lowercase as per Docker Hub requirements
+            username = username.toLowerCase();
+            paging = `page=${options.page}&page_size=${options.perPage}`
 
-                    // Make sure the username is all lowercase as per Docker Hub requirements
-                    username = username.toLowerCase();
-
-                    this.makeGetRequest(
-                        `repositories/${username}/${name}/comments?page_size=${options.perPage ||
-                            100}&page=${options.page || 1}`,
-                        'results',
-                    )
-                        .then(resolve)
-                        .catch(reject);
-                }.bind(this),
-            );
+            return this.makeSimpleRequest('GET', `repositories/${username}/${repository}/comments?${paging}`)
         },
         /**
          * Creates a build link for a given repository to the given repository.
@@ -614,31 +611,23 @@
          * @param {String} webhookName - the name of webhook to create
          * @returns {Promise}
          */
-        createWebhook: function(username, name, webhookName) {
-            return new Promise(
-                function(resolve, reject) {
-                    if (!username || typeof username !== 'string') {
-                        return reject(new Error('Username must be provided!'));
-                    }
+        createWebhook: function(user, repository, webhookName) {
+            if (!user || typeof user !== 'string') {
+                return this.promisifiedError('Username must be provided!')
+            }
 
-                    if (!name || typeof name !== 'string') {
-                        return reject(new Error('Repository name must be provided!'));
-                    }
+            if (!repository || typeof repository !== 'string') {
+                return this.promisifiedError('Repository name must be provided!')
+            }
 
-                    if (!webhookName || typeof webhookName !== 'string') {
-                        return reject(new Error('Webhook name must be provided!'));
-                    }
+            if (!webhookName || typeof webhookName !== 'string') {
+                return this.promisifiedError('Webhook name must be provided!')
+            }
 
-                    // Make sure the username is all lowercase as per Docker Hub requirements
-                    username = username.toLowerCase();
+            // Make sure the user is all lowercase as per Docker Hub requirements
+            user = user.toLowerCase();
 
-                    return this.makePostRequest(`repositories/${username}/${name}/webhooks/`, {
-                        name: webhookName,
-                    })
-                        .then(resolve)
-                        .catch(reject);
-                }.bind(this),
-            );
+            return this.makeSimpleRequest('POST', `repositories/${user}/${repository}/webhooks/`, {name: webhookName})
         },
         /**
          * Creates a hook for an existing webhook.
@@ -650,35 +639,28 @@
          * @returns {Promise}
          */
         createWebhookHook: function(username, name, webhookID, url) {
-            return new Promise(
-                function(resolve, reject) {
-                    if (!username || typeof username !== 'string') {
-                        return reject(new Error('Username must be provided!'));
-                    }
+            if (!username || typeof username !== 'string') {
+                return this.promisifiedError('Username must be provided!')
+            }
 
-                    if (!name || typeof name !== 'string') {
-                        return reject(new Error('Repository name must be provided!'));
-                    }
+            if (!name || typeof name !== 'string') {
+                return this.promisifiedError('Repository name must be provided!')
+            }
 
-                    if (!webhookID || typeof webhookID !== 'number') {
-                        return reject(new Error('Webhook ID must be provided!'));
-                    }
+            if (!webhookID || typeof webhookID !== 'number') {
+                return this.promisifiedError('Webhook ID must be provided!')
+            }
 
-                    if (!url || typeof url !== 'string') {
-                        return reject(new Error('URL must be provided!'));
-                    }
+            if (!url || typeof url !== 'string') {
+                return this.promisifiedError('URL must be provided!')
+            }
 
-                    // Make sure the username is all lowercase as per Docker Hub requirements
-                    username = username.toLowerCase();
+            // Make sure the username is all lowercase as per Docker Hub requirements
+            username = username.toLowerCase();
 
-                    return this.makePostRequest(
-                        `repositories/${username}/${name}/webhooks/${webhookID}/hooks/`,
-                        { hook_url: url },
-                    )
-                        .then(resolve)
-                        .catch(reject);
-                }.bind(this),
-            );
+            return this.makeSimpleRequest('POST', `repositories/${username}/${name}/webhooks/${webhookID}/hooks/`,
+                { hook_url: url }
+            )
         },
         /**
          * Deletes a build link for a given repository.
@@ -688,33 +670,27 @@
          * @param {Number} id - the id of the build link to delete
          * @returns {Promise}
          */
-        deleteBuildLink: function(username, name, id) {
-            return new Promise(
-                function(resolve, reject) {
-                    if (!username || typeof username !== 'string') {
-                        return reject(new Error('Username must be provided!'));
-                    }
+        deleteBuildLink: function(username, repository, id) {
+            if (!username || typeof username !== 'string') {
+                return new Promise((_, reject) => reject(new Error('Username must be provided!')));
+            }
 
-                    if (!name || typeof name !== 'string') {
-                        return reject(new Error('Repository name must be provided!'));
-                    }
+            if (!repository || typeof repository !== 'string') {
+                return new Promise((_, reject) => reject(new Error('Repository name must be provided!')));
+            }
 
-                    if (!id) {
-                        return reject(new Error('Build link id must be provided!'));
-                    }
+            if (!id) {
+                return new Promise((_, reject) => reject(new Error('Build link id must be provided!')));
+            }
 
-                    if (typeof id !== 'number' || id < 0) {
-                        return reject(new Error('Build link id must be a number greater than 0!'));
-                    }
+            if (typeof id !== 'number' || id < 0) {
+                return new Promise((_, reject) => reject(new Error('Build link id must be a number greater than 0!')));
+            }
 
-                    // Make sure the username is all lowercase as per Docker Hub requirements
-                    username = username.toLowerCase();
+            // Make sure the username is all lowercase as per Docker Hub requirements
+            username = username.toLowerCase();
 
-                    this.makeDeleteRequest(`repositories/${username}/${name}/links/${id}`)
-                        .then(resolve)
-                        .catch(reject);
-                }.bind(this),
-            );
+            return this.makeSimpleRequest('DELETE', `repositories/${username}/${repository}/links/${id}`)
         },
         /**
          * Deletes a build tag for a given repository.
@@ -790,29 +766,22 @@
         /**
          * Deletes a repository.
          *
-         * @param {String} username - the username of the repository to delete
-         * @param {String} name - the name of the repository to delete
+         * @param {String} user - the username of the repository to delete
+         * @param {String} repository - the name of the repository to delete
          * @returns {Promise}
          */
-        deleteRepository: function(username, name) {
-            return new Promise(
-                function(resolve, reject) {
-                    if (!username || typeof username !== 'string') {
-                        return reject(new Error('Username must be provided!'));
-                    }
+        deleteRepository: function(user, repository) {
+            if (!user || typeof user !== 'string') {
+                return this.promisifiedError('Username must be provided!')
+            }
 
-                    if (!name || typeof name !== 'string') {
-                        return reject(new Error('Repository name must be provided!'));
-                    }
+            if (!repository || typeof repository !== 'string') {
+                return this.promisifiedError('Repository name must be provided!')
+            }
 
-                    // Make sure the username is all lowercase as per Docker Hub requirements
-                    username = username.toLowerCase();
-
-                    return this.makeDeleteRequest(`repositories/${username}/${name}/`)
-                        .then(resolve)
-                        .catch(reject);
-                }.bind(this),
-            );
+            // Make sure the user is all lowercase as per Docker Hub requirements
+            user = user.toLowerCase();
+            return this.makeSimpleRequest('DELETE', `repositories/${user}/${repository}/`)
         },
         /**
          * Deletes a tag for the given username and repository.
@@ -904,22 +873,14 @@
         /**
          * Gets the details about a repository.
          *
-         * @param {String} [username] - the username of the repository to get information about. If left out or '_' is provided then it will query the official Docker repository with the given name
-         * @param {String} name - the name of the repository to get information about
+         * @param {String} user - the username of the repository to get information about. If left out or '_' is provided then it will query the official Docker repository with the given name
+         * @param {String} repository - the name of the repository to get information about
          * @returns {Promise}
          */
-        repository: function(username, name) {
-            // If username is '_' then we're trying to get an official repository
-            if (username === '_') {
-                username = 'library';
-            }
-
-            // Make sure the username is all lowercase as per Docker Hub requirements
-            username = username.toLowerCase();
-
-            console.log(`repositories/${username}/${name}`)
-
-            return this.makeGetRequest(`repositories/${username}/${name}`);
+        repository: function(user, repository) {
+            // Make sure the user is all lowercase as per Docker Hub requirements
+            user = user.toLowerCase();
+            return this.makeSimpleRequest('GET', `repositories/${user}/${repository}`);
         },
         /**
          * Gets the repositories for a user.
@@ -1307,6 +1268,19 @@
             // an error from what I've seen
             return detailDefined;
         },
+
+        /**
+         * Makes it even easier to call bent for very simple GET, DELETE or HEAD requests
+         * @param {String} method GET, DELETE, HEAD
+         * @param {String} path Path after the base domain
+         * @returns {Promise}
+         */
+        makeSimpleRequest(method, path, data) {
+            const req = bent(`${hubRegistry}/v${apiVersion}/`, method, 'json', this.getHttpHeader())
+            const normalizedPath = this.normalizeURLPath(path)
+            console.log(`calling ${hubRegistry}/v${apiVersion}/${normalizedPath}`)
+            return (data) ? req(this.normalizeURLPath(), data) : req(this.normalizeURLPath(path));
+        },
         /**
          * Makes a raw get request to the Docker Hub API.
          *
@@ -1314,9 +1288,7 @@
          * @returns {Promise}
          */
         makeGetRequest(path) {
-            let params = this.makeRequestParams(path)
-            const get = bent(`${hubRegistry}/v${apiVersion}/`, 'GET', 'json', params.headers)
-            return get(params.path)
+            return this.makeSimpleRequest('GET', path)
         },
         /**
          * Makes a raw delete request to the Docker Hub API.
@@ -1422,38 +1394,56 @@
          *
          * @param {String} path - the path to fetch
          * @param {Object} data - the data to send
-         * @param {String} [extract] - the name of the property in the resulting JSON to extract. If left blank it will return the entire JSON
          * @returns {Promise}
          */
-        makePutRequest(path, data, extract) {
-            let params = this.makeRequestParams(path)
-            const put = bent(`${hubRegistry}/v${apiVersion}/`, 'PUT', 'json', params.headers)
-
-            return put(path, data)
+        makePutRequest(path, data) {
+            const put = bent(`${hubRegistry}/v${apiVersion}/`, 'PUT', 'json', this.getHttpHeader())
+            return put(this.normalizeURLPath(path), data)
         },
+
         /**
-         * Generates and error checks a request object.
-         *
-         * @param {String} path - the path to fetch
+         * Returns an object with the "Authorization" header set, if we are logged in
+         * Else the returned object is empty.
+         * 
          * @returns {Object}
          */
-        makeRequestParams(path) {
-            // Normalize the path so it doesn't start with a slash
-            if (path.substr(0, 1) === '/') {
-                path = path.substr(1);
+        getHttpHeader() {
+            if(loggedInToken) {
+                httpHeader.Authorization = `JWT ${loggedInToken}`
             }
+            return httpHeader
+        },
 
+        /**
+         * Removes a potential leading '/' and appends a '/' is none is set.
+         * 
+         * @param {String} path Path string after the base URL
+         * @returns {String}
+         */
+        normalizeURLPath(path) {
+            let normalizedPath = path;
+
+            // remove leading / to have a consistent string
+            if(path[0] === '/') {
+                normalizedPath = path.substr(1)
+            }
+            
             // Also add a slash to the end of the path unless there is a ? in the path
             if (path.substr(-1) !== '/' && path.indexOf('?') === -1) {
-                path = path + '/';
+                normalizedPath += '/'
             }
-
-            let headers = {};
-            if (loggedInToken) {
-                headers.Authorization = `JWT ${loggedInToken}`;
-            }
-
-            return { path, headers };
+            return normalizedPath
         },
+
+        /**
+         * Internal helper function to return an error object that
+         * is transported by reject (from Promise)
+         * 
+         * @param {String} msg The message will given to new Error(msg)
+         * @returns {Promise}
+         */
+        promisifiedError(msg) {
+            return new Promise((_, reject) => reject(new Error(msg)))
+        }
     };
 })();
