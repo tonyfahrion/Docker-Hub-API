@@ -1,14 +1,14 @@
 {
-    "name": "docker-hub-api",
+    "name": "thin-docker-hub",
     "version": "0.8.0",
-    "description": "Docker Hub API is an API library written for NodeJS to access the official Docker Hub/Registry",
+    "description": "This docker hub is an API library written for NodeJS to access Docker Registries. It tries to be as thin as possible. Just getting the job done :)",
     "main": "src/api.js",
     "engines": {
-        "node": ">=4.2.0"
+        "node": ">=10.0.0"
     },
     "repository": {
         "type": "git",
-        "url": "https://github.com/RyanTheAllmighty/Docker-Hub-API.git"
+        "url": "https://github.com/tony.fahrion/this-docker-hub.git"
     },
     "author": "Ryan Dowling <ryan@ryandowling.me>",
     "license": "GPL-3.0",
@@ -20,8 +20,7 @@
         "test": "gulp"
     },
     "dependencies": {
-        "lodash": "^3.10.1",
-        "request": "^2.67.0"
+        "bent": "^7.3.2"
     },
     "devDependencies": {
         "chai": "^3.3.0",
